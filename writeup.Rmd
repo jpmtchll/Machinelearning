@@ -17,7 +17,7 @@ summary(train)
 ```
 Here, we find that many of the columns are almost completely filled with NA's.  We also found that there are many missing values in the dataset.  We found that of the 19622 rows in the dataset, only 406 rows did not contain NAs or missing data.  We looked at the columns in these 406 rows which had NAs in other rows, and did not see any noticeable correlations with the classe variable.  For this reason we omitted all the columns which contained NAs from our further analysis, as well the first seven columns of the data which contained information on the row number, time stamps, and window information.  We were thus left with a tidy data set of 19622 rows and 53 columns from an initial data set with the same number of rows and 160 columns.
 
-```{r,echo=FALSE,results='hide',error=FALSE}
+```{r,echo=FALSE,results='hide',cache=TRUE,error=FALSE}
   short<-c(1:160)
   for (i in 1:160){short[i]<-sum(is.na(train[,i]))}
   full93<-train[,short<1]
@@ -33,48 +33,47 @@ Here, we find that many of the columns are almost completely filled with NA's.  
 
   sh<-c(1:ncol(h))
   for(i in 1:ncol(h)){sh[i]<-sum(is.na(h[,i]))}
-  use<-h[,sh<1]
-  use[,ncol(use)]<-as.factor(use[,ncol(use)])
+  full<-h[,sh<1]
+  full[,ncol(full)]<-as.factor(full[,ncol(full)])
   
   set.seed(21)
   library(caret)
   library(kernlab)
 ```
 #Implementation of Machine learning methods.
-To reduce the amount of time we spend training the models, we performed a K-fold data split on our training data, into 8 folds.
+To reduce the amount of time we spend training the models, we performed a K-fold data split on our training data, into 20 folds.
 ```{r,cache=TRUE}
-folds<-createFolds(y=full$classe,k=8,list=TRUE,return=FALSE)
+folds<-createFolds(y=full$classe,k=20,list=TRUE,return=FALSE)
 ```
-We now have roughly 2453 or so rows of data per fold.  We will use Fold1 to train our models in order to decrease computation time.
+We now have roughly 981 or so rows of data per fold.  We will use Fold1 to train our models in order to decrease computation time.
 
 We begin by predicting with a tree, using all variable in our data set to predict for the classe variable.
 ```{r,cache=TRUE}
-modelFit<-train(classe ~ .,method="rpart",data=use[folds$Fold1,])
+modelFit<-train(classe ~ .,method="rpart",data=full[folds$Fold10,])
 ```
 We then use this model to predict the results of our entire training data set and obtain:
 ```{r}
-q<-predict(modelFit,full)
-table(q,full$classe)
-
+q<-predict(modelFit,full[-folds$Fold10,])
+table(q,full[-folds$Fold10,ncol(full)])
 ```
-Here, we find that we only predicted 49.6% of the events correctly.  This is very low, so we next attempt a simple random forrest.
+Here, we find that we only predicted 53.1% of the events correctly.  This is very low, so we next attempt a simple random forrest.
 ```{r,cache=TRUE}
-modelFitrf<-train(classe ~ .,method="rf",data=full[folds$Fold1,])
-q<-predict(modelFitrf,full)
-table(q,full$classe)
+modelFitrf<-train(classe ~ .,method="rf",data=full[folds$Fold10,])
+q<-predict(modelFitrf,full[-folds$Fold10,])
+table(q,full[-folds$Fold10,ncol(full)])
 ```
-With the random forrest we predict 96.2% correctly, this is a dramatic improvement.  We can however likely do better.  We decided that since a random forest is dramatically better than a tree for a basic prediction model, we would continue using the random forrest.  We next try to better the model by utilizing preprocessing, as well as cross validation.  We attempted a few different types of preprocessing and found that the "center" option gave the best results.  With this model we found:
+With the random forrest we predict 90.0% correctly, this is a dramatic improvement.  We can however likely do better.  We decided that since a random forest is dramatically better than a tree for a basic prediction model, we would continue using the random forrest.  We next try to better the model by utilizing preprocessing, as well as cross validation.  We attempted a few different types of preprocessing and found that the "center" option gave the best results.  With this model we found:
 ```{r,cache=TRUE}
-modelFitrf2cent<-train(classe ~ .,method="rf",data=full[folds$Fold1,],preProcess=c("center"), tuneLength=10, trControl = trainControl(method = "cv"))
-q<-predict(modelFitrf2cent,full)
-table(q,full$classe)
+modelFitrf2cent<-train(classe ~ .,method="rf",data=full[folds$Fold10,],preProcess=c("center"), tuneLength=10, trControl = trainControl(method = "cv"))
+q<-predict(modelFitrf2cent,full[-folds$Fold10,])
+table(q,full[-folds$Fold10,ncol(full)])
 ```
-which shows a slight improvement of 96.4%.
+which shows a slight improvement of 90.9%.
 
-Though the model is far from perfect, a 96.4% accuracy is not too bad, and due to time constraints, we will use this as our final model for the testing data.  We obtained a 95% accuracy with the test data set.
+Though the model is far from perfect, a 90.9% accuracy is not too bad, and due to time constraints, we will use this as our final model for the testing data.  We obtained a 95% accuracy with the test data set.
 
 ```{r,echo=FALSE}
 test<-read.csv("test.csv")
 td<-predict(modelFitrf2cent,test)
-table(td,test$classe)
+td
 ```

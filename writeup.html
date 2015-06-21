@@ -66,31 +66,59 @@ if (window.hljs && document.readyState && document.readyState === "complete") {
 <p>We can get a summary of the data as:</p>
 <pre class="r"><code>summary(train)</code></pre>
 <p>Here, we find that many of the columns are almost completely filled with NA’s. We also found that there are many missing values in the dataset. We found that of the 19622 rows in the dataset, only 406 rows did not contain NAs or missing data. We looked at the columns in these 406 rows which had NAs in other rows, and did not see any noticeable correlations with the classe variable. For this reason we omitted all the columns which contained NAs from our further analysis, as well the first seven columns of the data which contained information on the row number, time stamps, and window information. We were thus left with a tidy data set of 19622 rows and 53 columns from an initial data set with the same number of rows and 160 columns.</p>
-<pre><code>## Warning: package 'caret' was built under R version 3.1.3</code></pre>
-<pre><code>## Loading required package: lattice
-## Loading required package: ggplot2</code></pre>
-<pre><code>## Warning: package 'kernlab' was built under R version 3.1.3</code></pre>
 </div>
 <div id="implementation-of-machine-learning-methods." class="section level1">
 <h1>Implementation of Machine learning methods.</h1>
-<p>To reduce the amount of time we spend training the models, we performed a K-fold data split on our training data, into 8 folds.</p>
-<pre class="r"><code>folds&lt;-createFolds(y=full$classe,k=8,list=TRUE,return=FALSE)</code></pre>
-<p>We now have roughly 2453 or so rows of data per fold. We will use Fold1 to train our models in order to decrease computation time.</p>
+<p>To reduce the amount of time we spend training the models, we performed a K-fold data split on our training data, into 20 folds.</p>
+<pre class="r"><code>folds&lt;-createFolds(y=full$classe,k=20,list=TRUE,return=FALSE)</code></pre>
+<p>We now have roughly 981 or so rows of data per fold. We will use Fold1 to train our models in order to decrease computation time.</p>
 <p>We begin by predicting with a tree, using all variable in our data set to predict for the classe variable.</p>
-<pre class="r"><code>modelFit&lt;-train(classe ~ .,method=&quot;rpart&quot;,data=use[folds$Fold1,])</code></pre>
-<pre><code>## Loading required package: rpart</code></pre>
+<pre class="r"><code>modelFit&lt;-train(classe ~ .,method=&quot;rpart&quot;,data=full[folds$Fold10,])</code></pre>
 <p>We then use this model to predict the results of our entire training data set and obtain:</p>
-<pre class="r"><code>q&lt;-predict(modelFit,full)</code></pre>
+<pre class="r"><code>q&lt;-predict(modelFit,full[-folds$Fold10,])</code></pre>
 <pre><code>## Loading required package: rpart</code></pre>
-<pre class="r"><code>table(q,full$classe)</code></pre>
+<pre class="r"><code>table(q,full[-folds$Fold10,ncol(full)])</code></pre>
 <pre><code>##    
 ## q      A    B    C    D    E
-##   A 4124  689  659  315  116
-##   B  655 1824  458  350 1042
-##   C  237  351  965  310  222
-##   D  550  933 1340 2241  596
-##   E   14    0    0    0 1631</code></pre>
-<p>Here, we find that</p>
+##   A 4246 1327  627 1186  299
+##   B    0  702   52   44  187
+##   C  982 1019 2536 1539  702
+##   D    0    0    0    0    0
+##   E   73  559   36  286 2238</code></pre>
+<p>Here, we find that we only predicted 53.1% of the events correctly. This is very low, so we next attempt a simple random forrest.</p>
+<pre class="r"><code>modelFitrf&lt;-train(classe ~ .,method=&quot;rf&quot;,data=full[folds$Fold10,])</code></pre>
+<pre><code>## Loading required package: randomForest</code></pre>
+<pre><code>## Warning: package 'randomForest' was built under R version 3.1.3</code></pre>
+<pre><code>## randomForest 4.6-10
+## Type rfNews() to see new features/changes/bug fixes.</code></pre>
+<pre class="r"><code>q&lt;-predict(modelFitrf,full[-folds$Fold10,])
+table(q,full[-folds$Fold10,ncol(full)])</code></pre>
+<pre><code>##    
+## q      A    B    C    D    E
+##   A 5183  367   23   29    9
+##   B   45 2848  150    2  181
+##   C   29  279 3021  298   53
+##   D   33   46   22 2581   45
+##   E   11   67   35  145 3138</code></pre>
+<p>With the random forrest we predict 90.0% correctly, this is a dramatic improvement. We can however likely do better. We decided that since a random forest is dramatically better than a tree for a basic prediction model, we would continue using the random forrest. We next try to better the model by utilizing preprocessing, as well as cross validation. We attempted a few different types of preprocessing and found that the “center” option gave the best results. With this model we found:</p>
+<pre class="r"><code>modelFitrf2cent&lt;-train(classe ~ .,method=&quot;rf&quot;,data=full[folds$Fold10,],preProcess=c(&quot;center&quot;), tuneLength=10, trControl = trainControl(method = &quot;cv&quot;))
+q&lt;-predict(modelFitrf2cent,full[-folds$Fold10,])
+table(q,full[-folds$Fold10,ncol(full)])</code></pre>
+<pre><code>##    
+## q      A    B    C    D    E
+##   A 5168  359    1   20   14
+##   B   50 2938  123   26   78
+##   C   37  198 3028  277   61
+##   D   20   75   60 2600   66
+##   E   26   37   39  132 3207</code></pre>
+<p>which shows a slight improvement of 90.9%.</p>
+<p>Though the model is far from perfect, a 90.9% accuracy is not too bad, and due to time constraints, we will use this as our final model for the testing data. We obtained a 95% accuracy with the test data set.</p>
+<pre><code>## Loading required package: randomForest</code></pre>
+<pre><code>## Warning: package 'randomForest' was built under R version 3.1.3</code></pre>
+<pre><code>## randomForest 4.6-10
+## Type rfNews() to see new features/changes/bug fixes.</code></pre>
+<pre><code>##  [1] B A A A A E D D A A B C B A E E A B B B
+## Levels: A B C D E</code></pre>
 </div>
 
 
