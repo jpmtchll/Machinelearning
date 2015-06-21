@@ -1,0 +1,80 @@
+---
+title: "Machine Learning of Lifting Data."
+output: html_document
+---
+
+#Executive Summary
+We analyze the data from six weight lifters who performed bicep curls while wearing accelerometers on their belt, forearm, arm and the dumbell they were curling.  We utilize different machine learning techniques to try to quantify if the participant did the curl in one of five classes (called the classe variable): A (done correctly), B (throwing their elbows forward), C (lifting the dumbell only half way), D (lowering the dumbell only half way), or E (throwing their hips forward).  With a properly trained machine learning algorithm, it is possible for participants to determine if they performed their excercize with correct form with future data.
+
+#Cleaning the data
+To begin, we load the training data set.
+```{r,cache=TRUE}
+train<-read.csv("train.csv")
+```
+We can get a summary of the data as:
+```{r,eval=FALSE}
+summary(train)
+```
+Here, we find that many of the columns are almost completely filled with NA's.  We also found that there are many missing values in the dataset.  We found that of the 19622 rows in the dataset, only 406 rows did not contain NAs or missing data.  We looked at the columns in these 406 rows which had NAs in other rows, and did not see any noticeable correlations with the classe variable.  For this reason we omitted all the columns which contained NAs from our further analysis, as well the first seven columns of the data which contained information on the row number, time stamps, and window information.  We were thus left with a tidy data set of 19622 rows and 53 columns from an initial data set with the same number of rows and 160 columns.
+
+```{r,echo=FALSE,results='hide',error=FALSE}
+  short<-c(1:160)
+  for (i in 1:160){short[i]<-sum(is.na(train[,i]))}
+  full93<-train[,short<1]
+  full<-full93[,8:ncol(full93)]
+
+  h<-as.data.frame(sapply(full,function(f){is.na(f)<-which(f=="");f}))
+  h[,ncol(h)]<-as.character(h[,ncol(h)])
+  h[,ncol(h)]<-sub("1","A",h[,ncol(h)])
+  h[,ncol(h)]<-sub("2","B",h[,ncol(h)])
+  h[,ncol(h)]<-sub("3","C",h[,ncol(h)])
+  h[,ncol(h)]<-sub("4","D",h[,ncol(h)])
+  h[,ncol(h)]<-sub("5","E",h[,ncol(h)])
+
+  sh<-c(1:ncol(h))
+  for(i in 1:ncol(h)){sh[i]<-sum(is.na(h[,i]))}
+  use<-h[,sh<1]
+  use[,ncol(use)]<-as.factor(use[,ncol(use)])
+  
+  set.seed(21)
+  library(caret)
+  library(kernlab)
+```
+#Implementation of Machine learning methods.
+To reduce the amount of time we spend training the models, we performed a K-fold data split on our training data, into 8 folds.
+```{r,cache=TRUE}
+folds<-createFolds(y=full$classe,k=8,list=TRUE,return=FALSE)
+```
+We now have roughly 2453 or so rows of data per fold.  We will use Fold1 to train our models in order to decrease computation time.
+
+We begin by predicting with a tree, using all variable in our data set to predict for the classe variable.
+```{r,cache=TRUE}
+modelFit<-train(classe ~ .,method="rpart",data=use[folds$Fold1,])
+```
+We then use this model to predict the results of our entire training data set and obtain:
+```{r}
+q<-predict(modelFit,full)
+table(q,full$classe)
+
+```
+Here, we find that we only predicted 49.6% of the events correctly.  This is very low, so we next attempt a simple random forrest.
+```{r,cache=TRUE}
+modelFitrf<-train(classe ~ .,method="rf",data=full[folds$Fold1,])
+q<-predict(modelFitrf,full)
+table(q,full$classe)
+```
+With the random forrest we predict 96.2% correctly, this is a dramatic improvement.  We can however likely do better.  We decided that since a random forest is dramatically better than a tree for a basic prediction model, we would continue using the random forrest.  We next try to better the model by utilizing preprocessing, as well as cross validation.  We attempted a few different types of preprocessing and found that the "center" option gave the best results.  With this model we found:
+```{r,cache=TRUE}
+modelFitrf2cent<-train(classe ~ .,method="rf",data=full[folds$Fold1,],preProcess=c("center"), tuneLength=10, trControl = trainControl(method = "cv"))
+q<-predict(modelFitrf2cent,full)
+table(q,full$classe)
+```
+which shows a slight improvement of 96.4%.
+
+Though the model is far from perfect, a 96.4% accuracy is not too bad, and due to time constraints, we will use this as our final model for the testing data.  We obtained a 95% accuracy with the test data set.
+
+```{r,echo=FALSE}
+test<-read.csv("test.csv")
+td<-predict(modelFitrf2cent,test)
+table(td,test$classe)
+```
